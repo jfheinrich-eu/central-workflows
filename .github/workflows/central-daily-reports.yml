@@ -99,7 +99,7 @@ jobs:
 
       - name: Generate Daily Report for ${{ matrix.repository }}
         id: daily_report
-        uses: jfheinrich-eu/github-daily-report@63196a129709dfe696458e3bea5b9cf893b3e611 # v1.1.4
+        uses: jfheinrich-eu/github-daily-report@663a24d7f86e955e5872a5f5467531703e66b99d # v1.2.2
         with:
           GITHUB_TOKEN: ${{ steps.setup-secrets-gh-token.outputs.secret1 }}
           REPO_NAME: ${{ matrix.repository }}
