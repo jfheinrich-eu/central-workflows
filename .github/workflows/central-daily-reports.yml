@@ -1,0 +1,141 @@
+name: Central Daily Reports
+
+on:
+  schedule:
+    - cron: "15 6 * * *" # Daily at 06:15 UTC
+  workflow_dispatch:
+    inputs:
+      force_all:
+        description: "Run for all repositories (including disabled ones)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  load-config:
+    runs-on: ubuntu-latest
+    outputs:
+      repositories: ${{ steps.load-repos.outputs.repositories }}
+      total-count: ${{ steps.load-repos.outputs.total-count }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+        with:
+          egress-policy: audit
+          allowed-endpoints: |
+            tech.jfheinrich.eu:443
+            github.com:443
+
+      - name: Checkout central config
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Load repository configuration
+        id: load-repos
+        run: |
+          if [ "${{ github.event.inputs.force_all }}" == "true" ]; then
+            # Load all repositories (including disabled ones)
+            repos=$(jq -c '[.repositories[].name]' repos-config.json)
+            echo "Loading ALL repositories (including disabled ones)"
+          else
+            # Load only enabled repositories
+            repos=$(jq -c '[.repositories[] | select(.enabled == true) | .name]' repos-config.json)
+            echo "Loading only ENABLED repositories"
+          fi
+
+          count=$(echo "$repos" | jq length)
+          echo "Found $count repositories to process"
+          echo "repositories=$repos" >> $GITHUB_OUTPUT
+          echo "total-count=$count" >> $GITHUB_OUTPUT
+
+          # Debug output
+          echo "Repository list: $repos"
+
+  generate-reports:
+    needs: load-config
+    runs-on: ubuntu-latest
+    if: needs.load-config.outputs.repositories != '[]' && fromJson(needs.load-config.outputs.total-count) > 0
+    strategy:
+      matrix:
+        repository: ${{ fromJson(needs.load-config.outputs.repositories) }}
+      fail-fast: false
+      max-parallel: 3 # Maximum 3 parallel jobs
+
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+        with:
+          egress-policy: audit
+          allowed-endpoints: |
+            tech.jfheinrich.eu:443
+            github.com:443
+            api.github.com:443
+
+      - name: Setup secrets for GitHub token
+        id: setup-secrets-gh-token
+        uses: jfheinrich-eu/psono-secret-whisperer@61fb8cf9ca70b1bf0bf832da4af5d8ae7a665613 # v1.0.0
+        with:
+          ci_api_key_id: ${{ secrets.PSONO_API_KEY_ID }}
+          ci_api_secret_key_hex: ${{ secrets.PSONO_API_SECRET_KEY_HEX }}
+          ci_server_url: ${{ vars.PSONO_SERVER_URL }}
+          secret_id: ${{ secrets.PSONO_GITHUB_CLI_TOKEN }}
+          secret_type: "secret"
+          secret_fields: "password"
+          mask_secrets: "password"
+
+      - name: Fetch email and API secrets
+        id: setup-secrets
+        uses: jfheinrich-eu/psono-secret-whisperer@61fb8cf9ca70b1bf0bf832da4af5d8ae7a665613 # v1.0.0
+        with:
+          ci_api_key_id: ${{ secrets.PSONO_API_KEY_ID }}
+          ci_api_secret_key_hex: ${{ secrets.PSONO_API_SECRET_KEY_HEX }}
+          ci_server_url: ${{ vars.PSONO_SERVER_URL }}
+          secret_id: ${{ secrets.PSONO_DAILY_REPORT_ACTION_ENV }}
+          secret_type: "env"
+          secret_fields: "EMAIL_SENDER,EMAIL_USER,EMAIL_RECEIVER,EMAIL_PASSWORD,OPENAI_API_KEY,SMTP_SERVER,SMTP_PORT"
+          mask_secrets: "EMAIL_PASSWORD,OPENAI_API_KEY"
+
+      - name: Generate Daily Report for ${{ matrix.repository }}
+        id: daily_report
+        uses: jfheinrich-eu/github-daily-report@63196a129709dfe696458e3bea5b9cf893b3e611 # v1.1.4
+        with:
+          GITHUB_TOKEN: ${{ steps.setup-secrets-gh-token.outputs.secret1 }}
+          REPO_NAME: ${{ matrix.repository }}
+          EMAIL_SENDER: ${{ steps.setup-secrets.outputs.secret1 }}
+          EMAIL_USER: ${{ steps.setup-secrets.outputs.secret2 }}
+          EMAIL_RECEIVER: ${{ steps.setup-secrets.outputs.secret3 }}
+          EMAIL_PASSWORD: ${{ steps.setup-secrets.outputs.secret4 }}
+          OPENAI_API_KEY: ${{ steps.setup-secrets.outputs.secret5 }}
+          SMTP_SERVER: ${{ steps.setup-secrets.outputs.secret6 }}
+          SMTP_PORT: ${{ steps.setup-secrets.outputs.secret7 }}
+        continue-on-error: true
+
+      - name: Log result for ${{ matrix.repository }}
+        run: |
+          if [ "${{ steps.daily_report.outcome }}" == "success" ]; then
+            echo "✅ Daily report for ${{ matrix.repository }} generated successfully"
+          else
+            echo "❌ Daily report for ${{ matrix.repository }} failed"
+            echo "::warning::Daily report generation failed for ${{ matrix.repository }}"
+          fi
+
+  summary:
+    needs: [load-config, generate-reports]
+    runs-on: ubuntu-latest
+    if: always() && needs.load-config.outputs.repositories != '[]'
+    steps:
+      - name: Report Summary
+        run: |
+          echo "## Daily Reports Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Total repositories processed: ${{ needs.load-config.outputs.total-count }}" >> $GITHUB_STEP_SUMMARY
+          echo "Job status: ${{ needs.generate-reports.result }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.generate-reports.result }}" == "success" ]; then
+            echo "✅ All daily reports completed successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.generate-reports.result }}" == "failure" ]; then
+            echo "❌ Some daily reports failed - check individual job logs" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Daily report generation completed with mixed results" >> $GITHUB_STEP_SUMMARY
+          fi
