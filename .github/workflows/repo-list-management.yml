@@ -1,0 +1,62 @@
+name: Manage Repository List
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to perform"
+        required: true
+        type: choice
+        options:
+          - list-enabled
+          - list-all
+          - validate-config
+      repository_name:
+        description: "Repository name to check (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  manage-repos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Perform requested action
+        run: |
+          case "${{ github.event.inputs.action }}" in
+            "list-enabled")
+              echo "## Enabled Repositories:"
+              jq -r '.repositories[] | select(.enabled == true) | "- " + .name' repos-config.json
+              ;;
+            "list-all")
+              echo "## All Repositories:"
+              jq -r '.repositories[] | "- " + .name + " (" + (if .enabled then "enabled" else "disabled" end) + ")"' repos-config.json
+              ;;
+            "validate-config")
+              echo "## Validating configuration..."
+              if jq empty repos-config.json 2>/dev/null; then
+                echo "✅ Configuration is valid JSON"
+                echo "Total repositories: $(jq '.repositories | length' repos-config.json)"
+                echo "Enabled repositories: $(jq '[.repositories[] | select(.enabled == true)] | length' repos-config.json)"
+              else
+                echo "❌ Configuration contains invalid JSON"
+                exit 1
+              fi
+              ;;
+          esac
+
+          if [ -n "${{ github.event.inputs.repository_name }}" ]; then
+            echo ""
+            echo "## Repository Status: ${{ github.event.inputs.repository_name }}"
+            status=$(jq -r --arg repo "${{ github.event.inputs.repository_name }}" '.repositories[] | select(.name == $repo) | if .enabled then "enabled" else "disabled" end' repos-config.json)
+            if [ "$status" ]; then
+              echo "Status: $status"
+            else
+              echo "Repository not found in configuration"
+            fi
+          fi
