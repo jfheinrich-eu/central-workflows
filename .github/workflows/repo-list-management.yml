@@ -30,33 +30,36 @@ jobs:
         run: |
           case "${{ github.event.inputs.action }}" in
             "list-enabled")
-              echo "## Enabled Repositories:"
-              jq -r '.repositories[] | select(.enabled == true) | "- " + .name' repos-config.json
+              echo "## Enabled Repositories:" >> $GITHUB_STEP_SUMMARY
+              jq -r '.repositories[] | select(.enabled == true) | "- " + .name' repos-config.json >> $GITHUB_STEP_SUMMARY
               ;;
             "list-all")
-              echo "## All Repositories:"
-              jq -r '.repositories[] | "- " + .name + " (" + (if .enabled then "enabled" else "disabled" end) + ")"' repos-config.json
+              echo "## All Repositories:" >> $GITHUB_STEP_SUMMARY
+              echo "|Repository|Status|" >> $GITHUB_STEP_SUMMARY
+              echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
+              jq -r '.repositories[] | "|" + .name + "|" + (if .enabled then "enabled" else "disabled" end) + "|"' repos-config.json >> $GITHUB_STEP_SUMMARY
               ;;
             "validate-config")
-              echo "## Validating configuration..."
               if jq empty repos-config.json 2>/dev/null; then
-                echo "✅ Configuration is valid JSON"
-                echo "Total repositories: $(jq '.repositories | length' repos-config.json)"
-                echo "Enabled repositories: $(jq '[.repositories[] | select(.enabled == true)] | length' repos-config.json)"
+                echo "## Validating configuration" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "✅ Configuration is valid JSON" >> $GITHUB_STEP_SUMMARY
+                echo "Total repositories: $(jq '.repositories | length' repos-config.json)" >> $GITHUB_STEP_SUMMARY
+                echo "Enabled repositories: $(jq '[.repositories[] | select(.enabled == true)] | length' repos-config.json)" >> $GITHUB_STEP_SUMMARY
               else
-                echo "❌ Configuration contains invalid JSON"
+                echo "::error file=repos-config.json,title=Validate::❌ Configuration contains invalid JSON"
                 exit 1
               fi
               ;;
           esac
 
           if [ -n "${{ github.event.inputs.repository_name }}" ]; then
-            echo ""
-            echo "## Repository Status: ${{ github.event.inputs.repository_name }}"
             status=$(jq -r --arg repo "${{ github.event.inputs.repository_name }}" '.repositories[] | select(.name == $repo) | if .enabled then "enabled" else "disabled" end' repos-config.json)
             if [ "$status" ]; then
-              echo "Status: $status"
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "## Repository Status: ${{ github.event.inputs.repository_name }}" >> $GITHUB_STEP_SUMMARY
+              echo "Status: $status" >> $GITHUB_STEP_SUMMARY
             else
-              echo "Repository not found in configuration"
+              echo "::warning file=repos-config.json,title=${{ github.event.inputs.repository_name }}::Repository not found in configuration"
             fi
           fi
