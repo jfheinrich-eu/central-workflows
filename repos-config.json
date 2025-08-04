@@ -15,5 +15,6 @@
     {
       "name": "jfheinrich-eu/laravel-dockerized-dev-creator",
       "enabled": true
+    }
   ]
 }
