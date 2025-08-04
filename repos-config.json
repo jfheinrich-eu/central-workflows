@@ -6,11 +6,14 @@
     },
     {
       "name": "jfheinrich-eu/psono-secret-whisperer",
-      "enabled": false
+      "enabled": true
     },
     {
       "name": "jfheinrich-eu/github-daily-report",
-      "enabled": false
-    }
+      "enabled": true
+    },
+    {
+      "name": "jfheinrich-eu/laravel-dockerized-dev-creator",
+      "enabled": true
   ]
 }
