@@ -2,19 +2,31 @@
   "repositories": [
     {
       "name": "jfheinrich-eu/pipreqs-action",
-      "enabled": true
+      "enabled": [
+        "github-daily-report",
+        "mark-and-close-stale-prs"
+      ]
     },
     {
       "name": "jfheinrich-eu/psono-secret-whisperer",
-      "enabled": true
+      "enabled": [
+        "github-daily-report",
+        "mark-and-close-stale-prs"
+      ]
     },
     {
       "name": "jfheinrich-eu/github-daily-report",
-      "enabled": true
+      "enabled": [
+        "github-daily-report",
+        "mark-and-close-stale-prs"
+      ]
     },
     {
       "name": "jfheinrich-eu/laravel-dockerized-dev-creator",
-      "enabled": true
+      "enabled": [
+        "github-daily-report",
+        "mark-and-close-stale-prs"
+      ]
     }
   ]
 }

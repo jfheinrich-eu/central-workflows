@@ -17,6 +17,7 @@ permissions:
 jobs:
   load-config:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       repositories: ${{ steps.load-repos.outputs.repositories }}
       total-count: ${{ steps.load-repos.outputs.total-count }}
@@ -41,7 +42,7 @@ jobs:
             echo "Loading ALL repositories (including disabled ones)"
           else
             # Load only enabled repositories
-            repos=$(jq -c '[.repositories[] | select(.enabled == true) | .name]' repos-config.json)
+            repos=$(jq -c '[.repositories[] | select(.enabled[] == "github-daily-report") | .name]' repos-config.json)
             echo "Loading only ENABLED repositories"
           fi
 
@@ -56,6 +57,7 @@ jobs:
   generate-reports:
     needs: load-config
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     if: needs.load-config.outputs.repositories != '[]' && fromJson(needs.load-config.outputs.total-count) > 0
     strategy:
       matrix:
@@ -124,6 +126,7 @@ jobs:
   summary:
     needs: [load-config, generate-reports]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: always() && needs.load-config.outputs.repositories != '[]'
     steps:
       - name: Report Summary

@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Stale PRs Script",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/.github/scripts/mark_and_close_stale_prs.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "GITHUB_TOKEN": "${env:GITHUB_TOKEN}"
+            },
+            "justMyCode": true
+        }
+    ]
+}

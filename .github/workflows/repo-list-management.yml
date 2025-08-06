@@ -23,6 +23,11 @@ jobs:
   manage-repos:
     runs-on: ubuntu-latest
     steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -31,13 +36,13 @@ jobs:
           case "${{ github.event.inputs.action }}" in
             "list-enabled")
               echo "## Enabled Repositories:" >> $GITHUB_STEP_SUMMARY
-              jq -r '.repositories[] | select(.enabled == true) | "- " + .name' repos-config.json >> $GITHUB_STEP_SUMMARY
+              jq -r '.repositories[] | select(.enabled != []) | "- " + .name + " enabled on " + .enabled[]' repos-config.json >> $GITHUB_STEP_SUMMARY
               ;;
             "list-all")
               echo "## All Repositories:" >> $GITHUB_STEP_SUMMARY
-              echo "|Repository|Status|" >> $GITHUB_STEP_SUMMARY
+              echo "|Repository|enabled on|" >> $GITHUB_STEP_SUMMARY
               echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
-              jq -r '.repositories[] | "|" + .name + "|" + (if .enabled then "enabled" else "disabled" end) + "|"' repos-config.json >> $GITHUB_STEP_SUMMARY
+              jq -r '.repositories[] | "|" + .name + "|" + (.enabled | join(", ")) + "|"' repos-config.json >> $GITHUB_STEP_SUMMARY
               ;;
             "validate-config")
               if jq empty repos-config.json 2>/dev/null; then
@@ -45,7 +50,7 @@ jobs:
                 echo "" >> $GITHUB_STEP_SUMMARY
                 echo "✅ Configuration is valid JSON" >> $GITHUB_STEP_SUMMARY
                 echo "Total repositories: $(jq '.repositories | length' repos-config.json)" >> $GITHUB_STEP_SUMMARY
-                echo "Enabled repositories: $(jq '[.repositories[] | select(.enabled == true)] | length' repos-config.json)" >> $GITHUB_STEP_SUMMARY
+                echo "Enabled repositories: $(jq '[.repositories[] | select(.enabled != [])] | length' repos-config.json)" >> $GITHUB_STEP_SUMMARY
               else
                 echo "::error file=repos-config.json,title=Validate::❌ Configuration contains invalid JSON"
                 exit 1
@@ -54,7 +59,7 @@ jobs:
           esac
 
           if [ -n "${{ github.event.inputs.repository_name }}" ]; then
-            status=$(jq -r --arg repo "${{ github.event.inputs.repository_name }}" '.repositories[] | select(.name == $repo) | if .enabled then "enabled" else "disabled" end' repos-config.json)
+            status=$(jq -r --arg repo "${{ github.event.inputs.repository_name }}" '.repositories[] | select(.name == $repo) | if (.enabled != []) then "enabled on " + .enabled[] else "disabled" end' repos-config.json)
             if [ "$status" ]; then
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "## Repository Status: ${{ github.event.inputs.repository_name }}" >> $GITHUB_STEP_SUMMARY
