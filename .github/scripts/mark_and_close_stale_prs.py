@@ -31,7 +31,7 @@ for repo_entry in config["repositories"]:
     enabled: list[str] = repo_entry.get("enabled", [])
     pr_marked: list[str] = []
     pr_closed: list[str] = []
-    if "mark-and-close-stale-pr" not in enabled:
+    if "mark-and-close-stale-prs" not in enabled:
         logger.info(f"Skipping {repo_name} - service not enabled")
         results.append([repo_name, "Skipped", "", ""])
         continue
