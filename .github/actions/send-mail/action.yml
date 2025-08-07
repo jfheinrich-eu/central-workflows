@@ -1,0 +1,132 @@
+name: 'Send Email Notification'
+description: 'Send email notifications with summary content'
+author: 'Joerg Heinrich <joerg@jfheinrich.eu>'
+
+inputs:
+  EMAIL_SENDER:
+    description: 'Email sender address'
+    required: true
+  EMAIL_USER:
+    description: 'SMTP username'
+    required: true
+  EMAIL_RECEIVER:
+    description: 'Email receiver address'
+    required: true
+  EMAIL_PASSWORD:
+    description: 'SMTP password'
+    required: true
+  OPENAI_API_KEY:
+    description: 'OpenAI API key for content enhancement'
+    required: false
+  SMTP_SERVER:
+    description: 'SMTP server hostname'
+    required: true
+  SMTP_PORT:
+    description: 'SMTP server port'
+    required: true
+  SUMMARY_FILE:
+    description: 'Path to the summary file to send'
+    required: true
+    default: 'summary.md'
+
+outputs:
+  email_sent:
+    description: 'Whether email was sent successfully'
+    value: ${{ steps.send-email.outputs.email_sent }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      with:
+        python-version: '3.12'
+      shell: bash
+
+    - name: Send email notification
+      id: send-email
+      run: |
+        python3 << 'EOF'
+        import smtplib
+        import os
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.base import MIMEBase
+        from email import encoders
+        from datetime import datetime
+        
+        # Get inputs
+        sender = os.environ.get("EMAIL_SENDER")
+        user = os.environ.get("EMAIL_USER")
+        receiver = os.environ.get("EMAIL_RECEIVER")
+        password = os.environ.get("EMAIL_PASSWORD")
+        smtp_server = os.environ.get("SMTP_SERVER")
+        smtp_port = int(os.environ.get("SMTP_PORT"))
+        summary_file = os.environ.get("SUMMARY_FILE")
+        
+        try:
+            # Read summary file
+            with open(summary_file, 'r', encoding='utf-8') as f:
+                summary_content = f.read()
+            
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = sender
+            msg['To'] = receiver
+            msg['Subject'] = f"Stale PR Management Report - {datetime.now().strftime('%Y-%m-%d')}"
+            
+            # Email body
+            body = f"""Repository Management Report
+        
+        This is an automated report from the Central Workflows system.
+        
+        Report Details:
+        - Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+        - Type: Stale PR Management
+        
+        {summary_content}
+        
+        ---
+        This email was sent automatically by GitHub Actions."""
+            
+            msg.attach(MIMEText(body, 'plain'))
+            
+            # Attach summary file
+            with open(summary_file, 'rb') as attachment:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(attachment.read())
+                
+            encoders.encode_base64(part)
+            part.add_header(
+                'Content-Disposition',
+                f'attachment; filename= {summary_file}'
+            )
+            msg.attach(part)
+            
+            # Send email
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
+            server.login(user, password)
+            text = msg.as_string()
+            server.sendmail(sender, receiver, text)
+            server.quit()
+            
+            print("Email sent successfully!")
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write("email_sent=true\n")
+            
+        except Exception as e:
+            print(f"Error sending email: {str(e)}")
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write("email_sent=false\n")
+            exit(1)
+        EOF
+      shell: bash
+      env:
+        EMAIL_SENDER: ${{ inputs.EMAIL_SENDER }}
+        EMAIL_USER: ${{ inputs.EMAIL_USER }}
+        EMAIL_RECEIVER: ${{ inputs.EMAIL_RECEIVER }}
+        EMAIL_PASSWORD: ${{ inputs.EMAIL_PASSWORD }}
+        SMTP_SERVER: ${{ inputs.SMTP_SERVER }}
+        SMTP_PORT: ${{ inputs.SMTP_PORT }}
+        SUMMARY_FILE: ${{ inputs.SUMMARY_FILE }}

@@ -1,0 +1,54 @@
+name: secret_whisperer_email_config
+description: "Action to manage secrets for GitHub Actions workflows using Psono Secret Whisperer."
+author: "Joerg Heinrich"
+
+inputs:
+  PSONO_API_KEY_ID:
+    description: "The API key ID for Psono."
+    required: true
+  PSONO_API_SECRET_KEY_HEX:
+    description: "The API secret key in hexadecimal format for Psono."
+    required: true
+  PSONO_SERVER_URL:
+    description: "The URL of the Psono server."
+    required: true
+  PSONO_SECRET_ID:
+    description: "The ID of the secret in Psono."
+    required: true
+outputs:
+  EMAIL_SENDER:
+    description: "The email sender address retrieved from Psono."
+    value: ${{ steps.email-config-secrets.outputs.secret1 }}
+  EMAIL_USER:
+    description: "The email user name retrieved from Psono."
+    value: ${{ steps.email-config-secrets.outputs.secret2 }}
+  EMAIL_RECEIVER:
+    description: "The email receiver address retrieved from Psono."
+    value: ${{ steps.email-config-secrets.outputs.secret3 }}
+  EMAIL_PASSWORD:
+    description: "The email password retrieved from Psono."
+    value: ${{ steps.email-config-secrets.outputs.secret4 }}
+  OPENAI_API_KEY:
+    description: "The OpenAI API key retrieved from Psono."
+    value: ${{ steps.email-config-secrets.outputs.secret5 }}
+  SMTP_SERVER:
+    description: "The SMTP server address retrieved from Psono."
+    value: ${{ steps.email-config-secrets.outputs.secret6 }}
+  SMTP_PORT:
+    description: "The SMTP port retrieved from Psono."
+    value: ${{ steps.email-config-secrets.outputs.secret7 }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get eMail configuration
+      id: email-config-secrets
+      uses: jfheinrich-eu/psono-secret-whisperer@61fb8cf9ca70b1bf0bf832da4af5d8ae7a665613 # v1.0.0
+      with:
+        ci_api_key_id: ${{ inputs.PSONO_API_KEY_ID }}
+        ci_api_secret_key_hex: ${{ inputs.PSONO_API_SECRET_KEY_HEX }}
+        ci_server_url: ${{ inputs.PSONO_SERVER_URL }}
+        secret_id: ${{ inputs.PSONO_SECRET_ID }}
+        secret_type: "env"
+        secret_fields: "EMAIL_SENDER,EMAIL_USER,EMAIL_RECEIVER,EMAIL_PASSWORD,OPENAI_API_KEY,SMTP_SERVER,SMTP_PORT"
+        mask_secrets: "EMAIL_PASSWORD,OPENAI_API_KEY"

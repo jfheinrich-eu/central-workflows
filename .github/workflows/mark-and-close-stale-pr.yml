@@ -1,0 +1,91 @@
+name: Mark and Close Stale PRs for Multiple Repositories
+
+on:
+  schedule:
+    - cron: "0 1 * * *" # läuft täglich um 01:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mark-and-close-stale-prs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+          allowed-endpoints: |
+            tech.jfheinrich.eu:443
+            github.com:443
+
+      - name: Checkout central-workflow
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Repo Token Secrets
+        id: secret_whisperer
+        uses: ./.github/actions/secret_whisperer_token
+        with:
+          PSONO_API_KEY_ID: ${{ secrets.PSONO_API_KEY_ID }}
+          PSONO_API_SECRET_KEY_HEX: ${{ secrets.PSONO_API_SECRET_KEY_HEX }}
+          PSONO_SERVER_URL: ${{ vars.PSONO_SERVER_URL }}
+          PSONO_GITHUB_CLI_TOKEN: ${{ secrets.PSONO_GITHUB_CLI_TOKEN }}
+
+      - name: Email configuration
+        id: email_config
+        uses: ./.github/actions/secret_whisperer_email-config
+        with:
+          PSONO_API_KEY_ID: ${{ secrets.PSONO_API_KEY_ID }}
+          PSONO_API_SECRET_KEY_HEX: ${{ secrets.PSONO_API_SECRET_KEY_HEX }}
+          PSONO_SERVER_URL: ${{ vars.PSONO_SERVER_URL }}
+          PSONO_SECRET_ID: ${{ secrets.PSONO_DAILY_REPORT_ACTION_ENV }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r .github/scripts/requirements.txt
+
+      - name: Run Mark & Close Stale PRs
+        env:
+          GITHUB_TOKEN: ${{ steps.secret_whisperer.outputs.REPO_TOKEN }}
+        run: python .github/scripts/mark_and_close_stale_prs.py
+
+      - name: Add summary
+        if: always()
+        run: |
+          cat summary.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: stale-pr-summary
+          path: summary.md
+
+      - name: Send Mail
+        id: send_mail
+        if: always()
+        uses: ./.github/actions/send-mail
+        with:
+          EMAIL_SENDER: ${{ steps.email_config.outputs.EMAIL_SENDER }}
+          EMAIL_USER: ${{ steps.email_config.outputs.EMAIL_USER }}
+          EMAIL_RECEIVER: ${{ steps.email_config.outputs.EMAIL_RECEIVER }}
+          EMAIL_PASSWORD: ${{ steps.email_config.outputs.EMAIL_PASSWORD }}
+          OPENAI_API_KEY: ${{ steps.email_config.outputs.OPENAI_API_KEY }}
+          SMTP_SERVER: ${{ steps.email_config.outputs.SMTP_SERVER }}
+          SMTP_PORT: ${{ steps.email_config.outputs.SMTP_PORT }}
+          SUMMARY_FILE: summary.md
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up temporary files..."
+          rm -f summary.md
+          echo "Cleanup completed."
+        shell: bash
